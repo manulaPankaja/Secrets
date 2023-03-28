@@ -59,8 +59,8 @@ app.post("/login", (req, res) => {
     .then((foundUser) => {
         if(foundUser){
             if(foundUser.password === password){
-                res.render("secrets");
-                //console.log(foundUser.password); This is the encrypted password.
+                res.render("secrets"); //
+                //console.log(foundUser.password); This is the encrypted password.  
             }
         }
     })
