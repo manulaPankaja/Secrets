@@ -1,5 +1,5 @@
 //jshint esversion:6
-
+require('dotenv').config(); //This is the package we are using to hide our API keys.
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
@@ -23,8 +23,8 @@ const userSchema = new mongoose.Schema({
     password:String
 });
 
-const secret = "Thisisourlittlesecret."; //This is the secret key we are using to encrypt our passwords.
-userSchema.plugin(encrypt, { secret: secret, encryptedFields:["password"] }); //This is the encryption plugin we are using. We are passing in the secret key we created above. It's important to add this plugin to the schema before creating the mongoose model. Because we are passing in the userSchema as a parameter to create our new mongoose model (User model). encryptedFields is an array of the fields we want to encrypt. In this case we only have one field which is the password field.
+
+userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields:["password"] }); //This is the encryption plugin we are using. We are passing in the secret key we created above. It's important to add this plugin to the schema before creating the mongoose model. Because we are passing in the userSchema as a parameter to create our new mongoose model (User model). encryptedFields is an array of the fields we want to encrypt. In this case we only have one field which is the password field.
 
 const User = new mongoose.model("User", userSchema);
 
