@@ -4,7 +4,8 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require('mongoose');
-const encrypt = require("mongoose-encryption"); //This is the encryption package we are using.
+//const encrypt = require("mongoose-encryption"); //This is the encryption package we are using.
+const md5 = require("md5"); //This is the md5 package we are using. npm i md5 
 
 const app = express();
 
@@ -24,7 +25,7 @@ const userSchema = new mongoose.Schema({
 });
 
 
-userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields:["password"] }); //This is the encryption plugin we are using. We are passing in the secret key we created above. It's important to add this plugin to the schema before creating the mongoose model. Because we are passing in the userSchema as a parameter to create our new mongoose model (User model). encryptedFields is an array of the fields we want to encrypt. In this case we only have one field which is the password field.
+//userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields:["password"] }); //This is the encryption plugin we are using. We are passing in the secret key we created above. It's important to add this plugin to the schema before creating the mongoose model. Because we are passing in the userSchema as a parameter to create our new mongoose model (User model). encryptedFields is an array of the fields we want to encrypt. In this case we only have one field which is the password field.
 
 const User = new mongoose.model("User", userSchema);
 
@@ -43,7 +44,7 @@ app.get("/register", (req, res) => {
 app.post("/register", (req, res) => {
     const newUser = new User({
         email: req.body.username,
-        password: req.body.password
+        password: md5(req.body.password) // Use the md5 hash function to encrypt the password.
     });
 
     newUser.save()
@@ -53,7 +54,7 @@ app.post("/register", (req, res) => {
 
 app.post("/login", (req, res) => {
     const username = req.body.username;
-    const password = req.body.password;
+    const password = md5(req.body.password); //comparing the encrypted password to the encrypted password in the database. (using md5)
 
     User.findOne({email: username})
     .then((foundUser) => {
