@@ -5,7 +5,9 @@ const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require('mongoose');
 //const encrypt = require("mongoose-encryption"); //This is the encryption package we are using.
-const md5 = require("md5"); //This is the md5 package we are using. npm i md5 
+//const md5 = require("md5"); //This is the md5 package we are using. npm i md5 
+const bcrypt = require("bcrypt"); //This is the bcrypt package we are using. npm i bcrypt
+const saltRounds = 10; //This is the number of rounds we are using for the salt. The higher the number the more secure the password. But the longer it takes to encrypt the password. So it's a trade off. The higher the number the more secure the password. But the longer it takes to encrypt the password. So it's a trade off.
 
 const app = express();
 
@@ -42,29 +44,39 @@ app.get("/register", (req, res) => {
 });
 
 app.post("/register", (req, res) => {
-    const newUser = new User({
-        email: req.body.username,
-        password: md5(req.body.password) // Use the md5 hash function to encrypt the password.
-    });
 
-    newUser.save()
-    .then(() => res.render("secrets")) //Haven't created the secrets get route. Because we don't want to render that until the user is registered or logged in.
-    .catch(err => console.log(err));
+    bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+        const newUser = new User({
+            email: req.body.username,
+            //password: md5(req.body.password) // Use the md5 hash function to encrypt the password.
+            password: hash // Use the bcrypt hash function to encrypt the password.
+        });
+    
+        newUser.save()
+        .then(() => res.render("secrets")) //Haven't created the secrets get route. Because we don't want to render that until the user is registered or logged in.
+        .catch(err => console.log(err));
+    });
+    
 });
 
 app.post("/login", (req, res) => {
     const username = req.body.username;
-    const password = md5(req.body.password); //comparing the encrypted password to the encrypted password in the database. (using md5)
+    //const password = md5(req.body.password); //comparing the encrypted password to the encrypted password in the database. (using md5)
+    const password = req.body.password;
 
     User.findOne({email: username})
     .then((foundUser) => {
         if(foundUser){
-            if(foundUser.password === password){
-                res.render("secrets"); //
+            //if(foundUser.password === password){
+            bcrypt.compare(password, foundUser.password, function(err, result) {
+                if(result === true){
+                    res.render("secrets");
+                }
+            });
+                //res.render("secrets"); //
                 //console.log(foundUser.password); This is the encrypted password.  
             }
-        }
-    })
+        })
     .catch(err => console.log(err));
 
 });
