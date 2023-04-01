@@ -1,13 +1,13 @@
-//jshint esversion:6
 require('dotenv').config(); //This is the package we are using to hide our API keys.
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require('mongoose');
-//const encrypt = require("mongoose-encryption"); //This is the encryption package we are using.
-//const md5 = require("md5"); //This is the md5 package we are using. npm i md5 
-const bcrypt = require("bcrypt"); //This is the bcrypt package we are using. npm i bcrypt
-const saltRounds = 10; //This is the number of rounds we are using for the salt. The higher the number the more secure the password. But the longer it takes to encrypt the password. So it's a trade off. The higher the number the more secure the password. But the longer it takes to encrypt the password. So it's a trade off.
+const session = require('express-session'); //This is the package we are using to create sessions.
+////////////////// Authentication 01 ///////////////////////
+const passport = require('passport'); //This is the package we are using to authenticate users.
+const passportLocalMongoose = require('passport-local-mongoose'); //The passport-local-mongoose plugin simplifies the process of adding username and password-based authentication to your Node.js application. It provides a convenient way to add local authentication (username and password) to your Mongoose models by extending the schema and adding methods for registering and authenticating users.
+////////////////// Authentication 01 end ///////////////////////
 
 const app = express();
 
@@ -15,7 +15,19 @@ app.use(express.static("public"));
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({
   extended: true
-}));
+}));  
+
+////////////////// Authentication 02 ///////////////////////
+//This should be placed after app.use and before mongoose.connect
+app.use(session({
+    secret: "Our little secret.",
+    resave: false,
+    saveUninitialized: false
+})); //Telling app to use the session package.
+
+app.use(passport.initialize()); //Telling app to use the passport package.
+app.use(passport.session()); //Telling app to use the passport to deal with the sessions.
+////////////////// Authentication 02 end ///////////////////////
 
 mongoose.connect("mongodb://127.0.0.1:27017/userDB", {useNewUrlParser: true, useUnifiedTopology: true})
 .then(() => console.log('MongoDB connected...'))
@@ -26,12 +38,27 @@ const userSchema = new mongoose.Schema({
     password:String
 });
 
+////////////////// Authentication 03 ///////////////////////
+userSchema.plugin(passportLocalMongoose); //This is the passport-local-mongoose plugin we are using. We are passing in the userSchema (The mongoose schema we created before) as a parameter to create our new mongoose model (User model). This is we are going to use to hash and salt our passwords and save them to our database.
 
-//userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields:["password"] }); //This is the encryption plugin we are using. We are passing in the secret key we created above. It's important to add this plugin to the schema before creating the mongoose model. Because we are passing in the userSchema as a parameter to create our new mongoose model (User model). encryptedFields is an array of the fields we want to encrypt. In this case we only have one field which is the password field.
 
 const User = new mongoose.model("User", userSchema);
 
+passport.use(User.createStrategy());
 
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+// passport-local-mongoose to define the authentication strategy for your application and to serialize and deserialize user sessions.
+
+// passport.use(User.createStrategy()) - This line sets up the authentication strategy for your application using the createStrategy() method provided by passport-local-mongoose. It tells passport to use the username and password fields provided by passport-local-mongoose for authentication. This line of code should be placed after the passport-local-mongoose plugin has been added to your Mongoose schema.
+
+// passport.serializeUser(User.serializeUser()) - This line sets up serialization of the user session. Serialization is the process of transforming user data into a format that can be stored in a session store. User.serializeUser() is a method provided by passport-local-mongoose that serializes the user data by storing the user's id in the session store.
+
+// passport.deserializeUser(User.deserializeUser()) - This line sets up deserialization of the user session. Deserialization is the process of transforming serialized user data back into usable user data. User.deserializeUser() is a method provided by passport-local-mongoose that retrieves the user's id from the session store and retrieves the corresponding user object from the database.
+
+// These three lines of code are essential for implementing authentication in a Node.js application using passport-local-mongoose. They define the authentication strategy, serialize and deserialize user sessions, and enable passport to authenticate users and maintain sessions across multiple requests.
+////////////////// Authentication 03 end ///////////////////////
 
 app.get("/", (req, res) => {
     res.render("home");
@@ -43,41 +70,51 @@ app.get("/register", (req, res) => {
     res.render("register");
 });
 
-app.post("/register", (req, res) => {
+app.get("/secrets", (req, res) => {
+    if(req.isAuthenticated()){
+        res.render("secrets");
+    }else{
+        res.redirect("/login");
+    }
+});
 
-    bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
-        const newUser = new User({
-            email: req.body.username,
-            //password: md5(req.body.password) // Use the md5 hash function to encrypt the password.
-            password: hash // Use the bcrypt hash function to encrypt the password.
-        });
-    
-        newUser.save()
-        .then(() => res.render("secrets")) //Haven't created the secrets get route. Because we don't want to render that until the user is registered or logged in.
-        .catch(err => console.log(err));
+app.get("/logout", (req, res) => {
+    req.logout(function(err) {
+        if (err) { return next(err); }
+        res.redirect('/');
+      });
+});
+
+app.post("/register", (req, res) => {
+    User.register({username: req.body.username}, req.body.password, function (err, user){
+        if (err) {
+            console.log(err);
+            res.redirect("/register");
+        }else{
+            passport.authenticate("local")(req,res,function(){
+                res.redirect("/secrets");
+            });
+        }
     });
+    
     
 });
 
 app.post("/login", (req, res) => {
-    const username = req.body.username;
-    //const password = md5(req.body.password); //comparing the encrypted password to the encrypted password in the database. (using md5)
-    const password = req.body.password;
+    const user = new User({
+        username: req.body.username,
+        password: req.body.password
+    });
 
-    User.findOne({email: username})
-    .then((foundUser) => {
-        if(foundUser){
-            //if(foundUser.password === password){
-            bcrypt.compare(password, foundUser.password, function(err, result) {
-                if(result === true){
-                    res.render("secrets");
-                }
+    req.login(user, function(err){
+        if(err) {
+            console.log(err);
+        }else{
+            passport.authenticate("local")(req,res,function(){
+                res.redirect("/secrets");
             });
-                //res.render("secrets"); //
-                //console.log(foundUser.password); This is the encrypted password.  
-            }
-        })
-    .catch(err => console.log(err));
+        }
+    })
 
 });
 
