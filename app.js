@@ -9,6 +9,9 @@ const passport = require('passport'); //This is the package we are using to auth
 const passportLocalMongoose = require('passport-local-mongoose'); //The passport-local-mongoose plugin simplifies the process of adding username and password-based authentication to your Node.js application. It provides a convenient way to add local authentication (username and password) to your Mongoose models by extending the schema and adding methods for registering and authenticating users.
 ////////////////// Authentication 01 end ///////////////////////
 
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const findOrCreate = require('mongoose-findorcreate');
+
 const app = express();
 
 app.use(express.static("public"));
@@ -35,19 +38,36 @@ mongoose.connect("mongodb://127.0.0.1:27017/userDB", {useNewUrlParser: true, use
 
 const userSchema = new mongoose.Schema({
     email:String,
-    password:String
+    password:String,
+    googleId:String,
 });
 
 ////////////////// Authentication 03 ///////////////////////
 userSchema.plugin(passportLocalMongoose); //This is the passport-local-mongoose plugin we are using. We are passing in the userSchema (The mongoose schema we created before) as a parameter to create our new mongoose model (User model). This is we are going to use to hash and salt our passwords and save them to our database.
-
+userSchema.plugin(findOrCreate);
 
 const User = new mongoose.model("User", userSchema);
 
 passport.use(User.createStrategy());
 
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(function(user, cb) {
+    process.nextTick(function() {
+      return cb(null, {
+        id: user.id,
+        username: user.username,
+        picture: user.picture
+      });
+    });
+  });
+  
+  passport.deserializeUser(function(user, cb) {
+    process.nextTick(function() {
+      return cb(null, user);
+    });
+  });
+
+// passport.serializeUser(User.serializeUser());
+// passport.deserializeUser(User.deserializeUser());
 
 // passport-local-mongoose to define the authentication strategy for your application and to serialize and deserialize user sessions.
 
@@ -60,9 +80,35 @@ passport.deserializeUser(User.deserializeUser());
 // These three lines of code are essential for implementing authentication in a Node.js application using passport-local-mongoose. They define the authentication strategy, serialize and deserialize user sessions, and enable passport to authenticate users and maintain sessions across multiple requests.
 ////////////////// Authentication 03 end ///////////////////////
 
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets",
+    userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    console.log(profile);
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
+
 app.get("/", (req, res) => {
     res.render("home");
 });
+
+app.get("/auth/google",
+  passport.authenticate('google', { scope: ["profile"] })
+);
+
+app.get("/auth/google/secrets", 
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect secrets.
+    res.redirect('/secrets');
+  });
+
 app.get("/login", (req, res) => {
     res.render("login");
 });
